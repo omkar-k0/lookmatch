@@ -4,7 +4,7 @@ How it picks frames, without decoding the whole video:
 1. Probe the duration, then grab N_PROBE frames at evenly spaced timestamps (fast seek).
 2. Drop unusable frames: too dark, blown out, or flat (almost no detail).
 3. Split the rest into scenes where the colour histogram jumps between neighbours.
-4. Keep up to PER_SCENE frames per scene, up to MAX_FRAMES in total, spread over the clip.
+4. Spread MAX_FRAMES over the scenes (at least PER_SCENE each), capped at MAX_FRAMES in total.
 
 It also flags clips that look like log footage (very low contrast and saturation), because a
 look built on log footage does not transfer to normal footage.
@@ -109,10 +109,13 @@ def pick(times: list[float], frames: list[np.ndarray]) -> list[int]:
             cur = []
         cur.append(i)
     scenes.append(cur)
+    # Spread MAX_FRAMES over the scenes, at least PER_SCENE each: a single-shot clip still
+    # gives 8 frames, a clip with many cuts gives 2 per scene before the cap below.
+    per_scene = max(PER_SCENE, -(-MAX_FRAMES // len(scenes)))
     chosen = []
     for sc in scenes:
-        step = max(1, len(sc) // PER_SCENE)
-        chosen += sc[::step][:PER_SCENE]
+        idx = np.linspace(0, len(sc) - 1, min(per_scene, len(sc))).round().astype(int)
+        chosen += [sc[k] for k in sorted(set(idx.tolist()))]
     if len(chosen) > MAX_FRAMES:
         keep = np.linspace(0, len(chosen) - 1, MAX_FRAMES).round().astype(int)
         chosen = [chosen[k] for k in keep]

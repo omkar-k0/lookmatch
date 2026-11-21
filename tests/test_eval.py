@@ -14,12 +14,14 @@ def test_split_is_frozen_and_disjoint():
     assert frozen["dev"] == split.current()["dev"]
 
 
-def test_scene_pick_keeps_two_per_scene():
+def test_scene_pick_spreads_frames_over_scenes():
     rng = np.random.default_rng(1)
     a = [np.full((8, 8, 3), 0.2) + rng.random((8, 8, 3)) * 0.01 for _ in range(6)]
     b = [np.full((8, 8, 3), 0.8) + rng.random((8, 8, 3)) * 0.01 for _ in range(6)]
     keep = sample.pick(list(range(12)), a + b)
-    assert len(keep) == 4 and sum(k < 6 for k in keep) == 2
+    assert len(keep) == 8 and sum(k < 6 for k in keep) == 4
+    single = sample.pick(list(range(12)), a + a)  # one scene: still 8 frames
+    assert len(single) == 8
 
 
 def test_unusable_frames_are_dropped():
