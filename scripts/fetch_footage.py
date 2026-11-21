@@ -9,6 +9,7 @@ Standard library only, so it runs with any Python 3.9+:
     python3 scripts/fetch_footage.py            # up to 50 clips
     python3 scripts/fetch_footage.py --max 60
 """
+
 import argparse
 import csv
 import hashlib
@@ -24,9 +25,26 @@ API = "https://commons.wikimedia.org/w/api.php"
 UA = "lookmatch-eval-fetcher/0.1 (https://github.com/omkar-k0/lookmatch; portfolio research)"
 # Varied scenes: daylight, night, skin, foliage, water, sky, interiors, markets.
 QUERIES = [
-    "street walking", "city night", "beach waves", "forest walk", "mountain landscape", "sunset timelapse",
-    "market people", "river boat", "snow", "desert", "festival crowd", "kitchen cooking", "train station",
-    "flowers garden", "harbour", "portrait interview", "traffic road", "park children", "temple", "rain city",
+    "street walking",
+    "city night",
+    "beach waves",
+    "forest walk",
+    "mountain landscape",
+    "sunset timelapse",
+    "market people",
+    "river boat",
+    "snow",
+    "desert",
+    "festival crowd",
+    "kitchen cooking",
+    "train station",
+    "flowers garden",
+    "harbour",
+    "portrait interview",
+    "traffic road",
+    "park children",
+    "temple",
+    "rain city",
 ]
 OK_LICENCE = re.compile(r"^(cc0|public domain|pd|cc by [0-9.]+|cc-by-[0-9.]+|cc by|attribution)", re.I)
 BAD_LICENCE = re.compile(r"(sa|nc|nd)\b|share|noncommercial|no derivatives", re.I)
@@ -40,32 +58,48 @@ def get(params: dict) -> dict:
 
 
 def candidates(query: str, limit: int = 20) -> list[dict]:
-    data = get({
-        "action": "query", "generator": "search", "gsrsearch": f"filetype:video {query}",
-        "gsrnamespace": 6, "gsrlimit": limit,
-        "prop": "imageinfo", "iiprop": "url|size|mime|extmetadata",
-    })
+    data = get(
+        {
+            "action": "query",
+            "generator": "search",
+            "gsrsearch": f"filetype:video {query}",
+            "gsrnamespace": 6,
+            "gsrlimit": limit,
+            "prop": "imageinfo",
+            "iiprop": "url|size|mime|extmetadata",
+        }
+    )
     out = []
     for page in data.get("query", {}).get("pages", []):
         info = (page.get("imageinfo") or [{}])[0]
         meta = info.get("extmetadata", {})
         lic = meta.get("LicenseShortName", {}).get("value", "")
-        out.append({
-            "title": page["title"], "url": info.get("url", ""), "page": info.get("descriptionurl", ""),
-            "mime": info.get("mime", ""), "bytes": info.get("size", 0),
-            "width": info.get("width", 0), "height": info.get("height", 0),
-            "duration": float(info.get("duration") or 0),
-            "licence": re.sub("<[^>]+>", "", lic).strip(),
-            "author": re.sub("<[^>]+>", "", meta.get("Artist", {}).get("value", "")).strip()[:200],
-        })
+        out.append(
+            {
+                "title": page["title"],
+                "url": info.get("url", ""),
+                "page": info.get("descriptionurl", ""),
+                "mime": info.get("mime", ""),
+                "bytes": info.get("size", 0),
+                "width": info.get("width", 0),
+                "height": info.get("height", 0),
+                "duration": float(info.get("duration") or 0),
+                "licence": re.sub("<[^>]+>", "", lic).strip(),
+                "author": re.sub("<[^>]+>", "", meta.get("Artist", {}).get("value", "")).strip()[:200],
+            }
+        )
     return out
 
 
 def acceptable(c: dict) -> bool:
     lic = c["licence"]
-    return (bool(OK_LICENCE.search(lic)) and not BAD_LICENCE.search(lic.replace("cc by", "")))\
-        and c["mime"].startswith("video/") and c["width"] >= 1280 and 8 <= c["duration"] <= 900 \
+    return (
+        (bool(OK_LICENCE.search(lic)) and not BAD_LICENCE.search(lic.replace("cc by", "")))
+        and c["mime"].startswith("video/")
+        and c["width"] >= 1280
+        and 8 <= c["duration"] <= 900
         and 0 < c["bytes"] <= 250_000_000
+    )
 
 
 def main() -> None:
@@ -96,7 +130,10 @@ def main() -> None:
             ext = Path(urllib.parse.urlparse(c["url"]).path).suffix or ".webm"
             clip_id = f"c{len(rows) + 1:03d}"
             dst = out / "clips" / f"{clip_id}{ext}"
-            print(f"[{len(rows) + 1}/{a.max}] {q}: {c['title']} ({c['licence']}, {c['bytes'] / 1e6:.0f} MB)", flush=True)
+            print(
+                f"[{len(rows) + 1}/{a.max}] {q}: {c['title']} ({c['licence']}, {c['bytes'] / 1e6:.0f} MB)",
+                flush=True,
+            )
             try:
                 req = urllib.request.Request(c["url"], headers={"User-Agent": UA})
                 h = hashlib.sha256()
@@ -108,10 +145,22 @@ def main() -> None:
                 print(f"  download failed: {e}")
                 dst.unlink(missing_ok=True)
                 continue
-            rows.append({"clip_id": clip_id, "file": dst.name, "title": c["title"], "query": q,
-                         "licence": c["licence"], "author": c["author"], "source_page": c["page"],
-                         "url": c["url"], "width": c["width"], "height": c["height"],
-                         "duration_s": round(c["duration"], 1), "sha256": h.hexdigest()})
+            rows.append(
+                {
+                    "clip_id": clip_id,
+                    "file": dst.name,
+                    "title": c["title"],
+                    "query": q,
+                    "licence": c["licence"],
+                    "author": c["author"],
+                    "source_page": c["page"],
+                    "url": c["url"],
+                    "width": c["width"],
+                    "height": c["height"],
+                    "duration_s": round(c["duration"], 1),
+                    "sha256": h.hexdigest(),
+                }
+            )
             with open(manifest, "w", newline="", encoding="utf-8") as f:
                 w = csv.DictWriter(f, fieldnames=list(rows[0]))
                 w.writeheader()
