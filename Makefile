@@ -12,8 +12,8 @@ test:
 spike:             ## rerun the 17 Nov spike on the package code
 	uv run python -m lookmatch.spike
 
-footage:           ## download openly licensed clips (needs internet)
-	python3 scripts/fetch_footage.py --max 50
+footage:           ## download the exact eval clips listed in eval/footage_manifest.csv (needs internet)
+	python3 scripts/fetch_footage.py --from-manifest eval/footage_manifest.csv
 
 frames:            ## data/footage/clips -> data/frames (sampled, resized frames)
 	uv run python -m lookmatch.sample data/footage

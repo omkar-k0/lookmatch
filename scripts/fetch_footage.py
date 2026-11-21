@@ -8,6 +8,7 @@ with its licence, author and source page. The clips themselves are never committ
 Standard library only, so it runs with any Python 3.9+:
     python3 scripts/fetch_footage.py            # up to 50 clips
     python3 scripts/fetch_footage.py --max 60
+    python3 scripts/fetch_footage.py --from-manifest eval/footage_manifest.csv   # exact eval set
 """
 
 import argparse
@@ -102,12 +103,43 @@ def acceptable(c: dict) -> bool:
     )
 
 
+def download(url: str, dst: Path) -> str:
+    req = urllib.request.Request(url, headers={"User-Agent": UA})
+    h = hashlib.sha256()
+    with urllib.request.urlopen(req, timeout=300) as r, open(dst, "wb") as f:
+        for chunk in iter(lambda: r.read(1 << 20), b""):
+            f.write(chunk)
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def from_manifest(manifest: Path, out: Path) -> None:
+    """Download exactly the clips in a committed manifest and check every sha256."""
+    rows = list(csv.DictReader(open(manifest, encoding="utf-8")))
+    (out / "clips").mkdir(parents=True, exist_ok=True)
+    bad = 0
+    for r in rows:
+        dst = out / "clips" / r["file"]
+        if dst.exists() and hashlib.sha256(dst.read_bytes()).hexdigest() == r["sha256"]:
+            continue
+        print(f"{r['clip_id']}: {r['title']}", flush=True)
+        if download(r["url"], dst) != r["sha256"]:
+            print("  sha256 mismatch: the file on Commons changed", file=sys.stderr)
+            bad += 1
+        time.sleep(1)
+    (out / "manifest.csv").write_text(manifest.read_text(encoding="utf-8"), encoding="utf-8")
+    print(f"done: {len(rows) - bad} of {len(rows)} clips match the manifest")
+
+
 def main() -> None:
     p = argparse.ArgumentParser()
     p.add_argument("--max", type=int, default=50)
     p.add_argument("--out", default="data/footage")
+    p.add_argument("--from-manifest", type=Path, help="download exactly these clips and verify sha256")
     a = p.parse_args()
     out = Path(a.out)
+    if a.from_manifest:
+        return from_manifest(a.from_manifest, out)
     (out / "clips").mkdir(parents=True, exist_ok=True)
     manifest = out / "manifest.csv"
     seen = set()
@@ -135,12 +167,7 @@ def main() -> None:
                 flush=True,
             )
             try:
-                req = urllib.request.Request(c["url"], headers={"User-Agent": UA})
-                h = hashlib.sha256()
-                with urllib.request.urlopen(req, timeout=300) as r, open(dst, "wb") as f:
-                    for chunk in iter(lambda: r.read(1 << 20), b""):
-                        f.write(chunk)
-                        h.update(chunk)
+                digest = download(c["url"], dst)
             except Exception as e:
                 print(f"  download failed: {e}")
                 dst.unlink(missing_ok=True)
@@ -158,7 +185,7 @@ def main() -> None:
                     "width": c["width"],
                     "height": c["height"],
                     "duration_s": round(c["duration"], 1),
-                    "sha256": h.hexdigest(),
+                    "sha256": digest,
                 }
             )
             with open(manifest, "w", newline="", encoding="utf-8") as f:
