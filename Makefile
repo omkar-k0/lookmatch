@@ -1,4 +1,4 @@
-.PHONY: check lint test spike frames eval
+.PHONY: check lint test spike footage frames eval
 
 check: lint test   ## what CI runs
 
@@ -12,8 +12,12 @@ test:
 spike:             ## rerun the 17 Nov spike on the package code
 	uv run python -m lookmatch.spike
 
+footage:           ## download openly licensed clips (needs internet)
+	python3 scripts/fetch_footage.py --max 50
+
 frames:            ## data/footage/clips -> data/frames (sampled, resized frames)
 	uv run python -m lookmatch.sample data/footage
 
 eval:              ## dev split by default; SPLIT=heldout only once per milestone
 	uv run python -m lookmatch.evaluate --split $(or $(SPLIT),dev)
+	uv run python -m lookmatch.report
